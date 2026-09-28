@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Dashboard TomTicket</title>
+
+    <link rel="stylesheet" href="style.css">
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+
+    <header class="header">
+
+        <div>
+            <h1> Tom Ticket</h1>
+            <p>Relatório de atendimentos</p>
+        </div>
+
+        <label class="botao-upload">
+            📂 Importar Relatório
+            <input
+                type="file"
+                id="arquivoXML"
+                accept=".xml"
+                hidden
+            >
+        </label>
+
+    </header>
+
+
+    <main class="container">
+
+        <!-- CARDS -->
+
+        <section class="cards">
+
+            <div class="card">
+                <span>Total de registros</span>
+                <strong id="totalRegistros">0</strong>
+            </div>
+
+            <div class="card">
+                <span>Total de atendimentos</span>
+                <strong id="totalAtendimentos">0</strong>
+            </div>
+
+            <div class="card">
+                <span>Média por dia</span>
+                <strong id="mediaDia">0</strong>
+            </div>
+
+            <div class="card">
+                <span>Maior atendimento</span>
+                <strong id="maiorAtendimento">0</strong>
+            </div>
+
+        </section>
+
+
+        <!-- FILTROS -->
+
+        <section class="painel filtros">
+
+            <div>
+                <label>Data inicial</label>
+                <input type="date" id="dataInicial">
+            </div>
+
+            <div>
+                <label>Data final</label>
+                <input type="date" id="dataFinal">
+            </div>
+
+            <button id="btnFiltrar">
+                Filtrar
+            </button>
+
+            <button id="btnLimpar">
+                Limpar
+            </button>
+
+        </section>
+
+
+        <!-- GRÁFICO -->
+
+        <section class="painel">
+
+            <div class="titulo">
+
+                <div>
+                    <h2>Atendimentos por período</h2>
+                    <p id="periodo">Nenhum arquivo carregado</p>
+                </div>
+
+            </div>
+
+            <div class="grafico-container">
+                <canvas id="grafico"></canvas>
+            </div>
+
+        </section>
+
+
+        <!-- RESUMO -->
+
+        <section class="painel">
+
+            <div class="titulo">
+
+                <h2>Resumo dos atendimentos</h2>
+
+            </div>
+
+            <div class="resumo">
+
+                <div>
+                    <span>Primeiro dia</span>
+                    <strong id="primeiraData">-</strong>
+                </div>
+
+                <div>
+                    <span>Último dia</span>
+                    <strong id="ultimaData">-</strong>
+                </div>
+
+                <div>
+                    <span>Dia com mais atendimentos</span>
+                    <strong id="diaMaior">-</strong>
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- TABELA -->
+
+        <section class="painel">
+
+            <div class="titulo">
+
+                <h2>Atendimentos detalhados</h2>
+
+                <input
+                    type="text"
+                    id="pesquisa"
+                    placeholder="Pesquisar data..."
+                >
+
+            </div>
+
+
+            <div class="tabela-container">
+
+                <table>
+
+                    <thead>
+
+                        <tr>
+                            <th>Data</th>
+                            <th>Atendimentos</th>
+                            <th>Representação</th>
+                        </tr>
+
+                    </thead>
+
+                    <tbody id="tabela">
+
+                        <tr>
+                            <td colspan="3">
+                                Importe o XML do TomTicket
+                            </td>
+                        </tr>
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        </section>
+
+    </main>
+
+
+    <script src="script.js"></script>
+
+</body>
+
+</html>
