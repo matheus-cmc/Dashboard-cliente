@@ -803,22 +803,15 @@ if (btnFiltrar) {
 function aplicarFiltro() {
 
     const campoInicial =
-        document.getElementById(
-            "dataInicial"
-        );
-
+        document.getElementById("dataInicial");
 
     const campoFinal =
-        document.getElementById(
-            "dataFinal"
-        );
-
+        document.getElementById("dataFinal");
 
     const inicial =
         campoInicial
             ? campoInicial.value
             : "";
-
 
     const final =
         campoFinal
@@ -827,59 +820,42 @@ function aplicarFiltro() {
 
 
     dadosFiltrados =
-        atendimentos.filter(
-            function (item) {
+        atendimentos.filter(function (item) {
 
-                const data =
-                    converterData(item.data);
+            // Data do XML: DD/MM/YYYY
+            const partes = item.data.split("/");
 
-
-                const inicio =
-                    inicial
-                        ? new Date(
-                            inicial +
-                            "T00:00:00"
-                        )
-                        : null;
-
-
-                const fim =
-                    final
-                        ? new Date(
-                            final +
-                            "T23:59:59"
-                        )
-                        : null;
-
-
-                if (
-                    inicio &&
-                    data < inicio
-                ) {
-
-                    return false;
-
-                }
-
-
-                if (
-                    fim &&
-                    data > fim
-                ) {
-
-                    return false;
-
-                }
-
-
-                return true;
-
+            if (partes.length !== 3) {
+                return false;
             }
-        );
+
+            // Transforma:
+            // 28/09/2026
+            // em:
+            // 2026-09-28
+            const dataItem =
+                partes[2] + "-" +
+                partes[1].padStart(2, "0") + "-" +
+                partes[0].padStart(2, "0");
+
+
+            // Verifica data inicial
+            if (inicial && dataItem < inicial) {
+                return false;
+            }
+
+
+            // Verifica data final
+            if (final && dataItem > final) {
+                return false;
+            }
+
+
+            return true;
+        });
 
 
     atualizarDashboard();
-
 }
 
 
