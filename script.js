@@ -1,552 +1,419 @@
-let atendimentos = [];
-let dadosFiltrados = [];
+let registros = [];
+let clientes = [];
 let grafico = null;
 
 
-// ==========================================
-// IMPORTAR XML
-// ==========================================
+const arquivoPlanilha = document.getElementById("arquivoPlanilha");
 
-const arquivoXML = document.getElementById("arquivoXML");
+if (arquivoPlanilha) {
 
-if (arquivoXML) {
+    arquivoPlanilha.addEventListener("change", async function (event) {
 
-    arquivoXML.addEventListener("change", function (event) {
+        const arquivos = [...event.target.files];
 
-        const arquivo = event.target.files[0];
+        event.target.value = "";
 
-        if (!arquivo) {
+        if (arquivos.length === 0) {
             return;
         }
 
-        const leitor = new FileReader();
+        const todos = [];
+        const falhas = [];
 
-        leitor.onload = function (evento) {
+        for (const arquivo of arquivos) {
 
-            const textoXML = evento.target.result;
+            try {
 
-            lerXML(textoXML);
+                const buffer = await lerArquivo(arquivo);
+                const itens = lerPlanilha(buffer, arquivo.name);
 
-        };
+                if (itens.length === 0) {
+                    falhas.push(arquivo.name);
+                    continue;
+                }
 
-        leitor.onerror = function () {
+                todos.push(...itens);
 
-            alert("Não foi possível ler o arquivo XML.");
+            } catch (erro) {
 
-        };
+                console.error(erro);
+                falhas.push(arquivo.name);
 
-        leitor.readAsText(arquivo);
+            }
+
+        }
+
+        if (todos.length === 0) {
+
+            alert(
+                "Não encontrei atendimentos nessa planilha. Use o Excel de Tempos de Atendimento exportado pelo TomTicket."
+            );
+
+            return;
+
+        }
+
+        registros = deduplicar(todos);
+        atualizarDashboard();
+
+        if (falhas.length > 0) {
+
+            alert(
+                "Estes arquivos não entraram no dashboard:\n" +
+                falhas.join("\n")
+            );
+
+        }
 
     });
 
 }
 
 
-// ==========================================
-// LER XML
-// ==========================================
+function lerArquivo(arquivo) {
 
-function lerXML(texto) {
+    return new Promise(function (resolve, reject) {
 
-    const parser = new DOMParser();
+        const leitor = new FileReader();
 
-    const xml = parser.parseFromString(
-        texto,
-        "application/xml"
-    );
+        leitor.onload = function () {
+            resolve(leitor.result);
+        };
+
+        leitor.onerror = function () {
+            reject(new Error("Não foi possível ler o arquivo."));
+        };
+
+        leitor.readAsArrayBuffer(arquivo);
+
+    });
+
+}
 
 
-    // Verifica se o XML possui erro
+function lerPlanilha(buffer, nomeArquivo) {
 
-    const erro = xml.querySelector("parsererror");
+    if (typeof XLSX === "undefined") {
+        throw new Error("A biblioteca de planilhas não carregou.");
+    }
 
-    if (erro) {
+    const livro = XLSX.read(buffer, { type: "array" });
+    const aba = livro.Sheets[livro.SheetNames[0]];
 
-        alert("O XML está inválido.");
+    const linhas = XLSX.utils.sheet_to_json(aba, {
+        header: 1,
+        raw: true,
+        defval: ""
+    });
 
-        console.error("Erro no XML:", erro.textContent);
+    const periodo =
+        extrairPeriodo(linhas) ||
+        periodoDoNome(nomeArquivo);
 
-        return;
+    let indiceCabecalho = -1;
+
+    for (let i = 0; i < linhas.length; i++) {
+
+        const cabecalho = linhas[i].map(function (celula) {
+            return normalizar(celula);
+        });
+
+        if (
+            cabecalho.includes("protocolo") &&
+            cabecalho.includes("cliente")
+        ) {
+            indiceCabecalho = i;
+            break;
+        }
 
     }
 
+    if (indiceCabecalho === -1) {
+        return [];
+    }
 
-    // ==========================================
-    // PROCURA OS REGISTROS
-    // ==========================================
+    const cabecalho = linhas[indiceCabecalho].map(function (celula) {
+        return normalizar(celula);
+    });
 
-    const elementos =
-        xml.querySelectorAll("atendimento");
+    const colunas = {
+        protocolo: cabecalho.indexOf("protocolo"),
+        cliente: cabecalho.indexOf("cliente"),
+        espera: cabecalho.findIndex(function (nome) {
+            return nome.includes("espera");
+        }),
+        conversa: cabecalho.findIndex(function (nome) {
+            return nome.includes("conversa");
+        })
+    };
+
+    const itens = [];
+
+    for (let i = indiceCabecalho + 1; i < linhas.length; i++) {
+
+        const linha = linhas[i];
+        const protocolo = textoCelula(linha[colunas.protocolo]);
+
+        if (protocolo === "") {
+            continue;
+        }
+
+        if (normalizar(protocolo).includes("tempomedio")) {
+            continue;
+        }
+
+        const cliente = textoCelula(linha[colunas.cliente]);
+
+        if (normalizar(cliente).includes("tempomedio")) {
+            continue;
+        }
+
+        const espera = linha[colunas.espera];
+        const conversa = linha[colunas.conversa];
+
+        itens.push({
+            protocolo: protocolo,
+            cliente: cliente,
+            espera: tempoParaSegundos(espera),
+            conversa: tempoParaSegundos(conversa),
+            temEspera: celulaPreenchida(espera),
+            temConversa: celulaPreenchida(conversa),
+            inicio: periodo ? periodo.inicio : "",
+            fim: periodo ? periodo.fim : ""
+        });
+
+    }
+
+    return itens;
+
+}
 
 
-    atendimentos = [];
+function deduplicar(itens) {
+
+    const vistos = new Set();
+    const unicos = [];
+
+    itens.forEach(function (item) {
+
+        if (vistos.has(item.protocolo)) {
+            return;
+        }
+
+        vistos.add(item.protocolo);
+        unicos.push(item);
+
+    });
+
+    return unicos;
+
+}
 
 
-    elementos.forEach(function (elemento) {
+function agruparClientes(itens) {
 
-        // ------------------------------------------
-        // DATA
-        // ------------------------------------------
+    const mapa = new Map();
 
-        const elementoData =
-            elemento.querySelector("data");
+    itens.forEach(function (item) {
 
+        const nome =
+            item.cliente !== ""
+                ? item.cliente
+                : "Não informado";
 
-        // ------------------------------------------
-        // TOTAL
-        // ------------------------------------------
+        const chave = normalizar(nome);
 
-        const elementoTotal =
-            elemento.querySelector("total");
+        if (!mapa.has(chave)) {
 
-
-        const data =
-            elementoData
-                ? elementoData.textContent.trim()
-                : "";
-
-
-        const textoTotal =
-            elementoTotal
-                ? elementoTotal.textContent.trim()
-                : "";
-
-
-        // ------------------------------------------
-        // CONVERTE O TOTAL
-        // ------------------------------------------
-
-        const total =
-            converterTotal(textoTotal);
-
-
-        // ------------------------------------------
-        // ADICIONA O REGISTRO
-        // ------------------------------------------
-
-        if (data !== "") {
-
-            atendimentos.push({
-
-                data: data,
-
-                total: total
-
+            mapa.set(chave, {
+                cliente: nome,
+                atendimentos: 0,
+                conversa: 0,
+                espera: 0,
+                comConversa: 0,
+                comEspera: 0
             });
 
         }
 
+        const atual = mapa.get(chave);
+
+        atual.atendimentos += 1;
+
+        if (item.temConversa) {
+            atual.conversa += item.conversa;
+            atual.comConversa += 1;
+        }
+
+        if (item.temEspera) {
+            atual.espera += item.espera;
+            atual.comEspera += 1;
+        }
+
     });
 
-
-    // ==========================================
-    // VERIFICA SE ENCONTROU OS DADOS
-    // ==========================================
-
-    if (atendimentos.length === 0) {
-
-        alert(
-            "Nenhum registro encontrado no XML."
-        );
-
-        console.log("XML:", xml);
-
-        return;
-
-    }
-
-
-    // ==========================================
-    // MOSTRA NO CONSOLE PARA CONFERÊNCIA
-    // ==========================================
-
-    console.log(
-        "Registros encontrados:",
-        atendimentos
-    );
-
-
-    // ==========================================
-    // COPIA OS DADOS
-    // ==========================================
-
-    dadosFiltrados =
-        [...atendimentos];
-
-
-    // ==========================================
-    // ATUALIZA DASHBOARD
-    // ==========================================
-
-    atualizarDashboard();
+    return [...mapa.values()];
 
 }
 
-
-// ==========================================
-// CONVERTER TOTAL DA PLANILHA
-// ==========================================
-
-function converterTotal(valor) {
-
-    if (
-        valor === null ||
-        valor === undefined ||
-        valor === ""
-    ) {
-
-        return 0;
-
-    }
-
-
-    let texto =
-        String(valor).trim();
-
-
-    // Remove espaços
-
-    texto =
-        texto.replace(/\s/g, "");
-
-
-    // ------------------------------------------
-    // CASO:
-    // 1.234,56
-    // ------------------------------------------
-
-    if (
-        texto.includes(".") &&
-        texto.includes(",")
-    ) {
-
-        texto =
-            texto
-                .replace(/\./g, "")
-                .replace(",", ".");
-
-    }
-
-    // ------------------------------------------
-    // CASO:
-    // 2,5
-    // ------------------------------------------
-
-    else if (texto.includes(",")) {
-
-        texto =
-            texto.replace(",", ".");
-
-    }
-
-
-    const numero =
-        Number(texto);
-
-
-    if (Number.isNaN(numero)) {
-
-        console.warn(
-            "Valor de Total inválido:",
-            valor
-        );
-
-        return 0;
-
-    }
-
-
-    return numero;
-
-}
-
-
-// ==========================================
-// ATUALIZAR DASHBOARD
-// ==========================================
 
 function atualizarDashboard() {
 
+    clientes = agruparClientes(registros);
+    clientes.sort(compararMais);
+
     atualizarCards();
-
     atualizarResumo();
-
     atualizarTabela();
-
     atualizarGrafico();
 
 }
 
 
-// ==========================================
-// CARDS
-// ==========================================
-
 function atualizarCards() {
 
-    // Quantidade de linhas da planilha
+    definirTexto("totalAtendimentos", registros.length);
+    definirTexto("totalClientes", clientes.length);
 
-    const totalRegistros =
-        dadosFiltrados.length;
+    if (clientes.length === 0) {
 
+        definirTexto("clienteMais", "—");
+        definirTexto("clienteMaisDetalhe", "Nenhum cliente na planilha");
+        definirTexto("clienteMenos", "—");
+        definirTexto("clienteMenosDetalhe", "Nenhum cliente na planilha");
 
-    // Soma da coluna TOTAL
-
-    const totalAtendimentos =
-        dadosFiltrados.reduce(
-            function (soma, item) {
-
-                return soma + item.total;
-
-            },
-            0
-        );
-
-
-    // Média por dia
-
-    const media =
-        totalRegistros > 0
-            ? totalAtendimentos / totalRegistros
-            : 0;
-
-
-    // Maior valor da coluna TOTAL
-
-    const maior =
-        totalRegistros > 0
-            ? Math.max(
-                ...dadosFiltrados.map(
-                    item => item.total
-                )
-            )
-            : 0;
-
-
-    // ------------------------------------------
-    // TOTAL DE REGISTROS
-    // ------------------------------------------
-
-    const totalRegistrosElemento =
-        document.getElementById(
-            "totalRegistros"
-        );
-
-
-    if (totalRegistrosElemento) {
-
-        totalRegistrosElemento.textContent =
-            totalRegistros;
+        return;
 
     }
 
+    const mais = clientes[0];
+    const menos = [...clientes].sort(compararMenos)[0];
 
-    // ------------------------------------------
-    // TOTAL DE ATENDIMENTOS
-    // ------------------------------------------
+    definirTexto("clienteMais", mais.cliente);
+    definirTexto(
+        "clienteMaisDetalhe",
+        descreverCliente(mais, clientes, "mais")
+    );
 
-    const totalAtendimentosElemento =
-        document.getElementById(
-            "totalAtendimentos"
-        );
-
-
-    if (totalAtendimentosElemento) {
-
-        totalAtendimentosElemento.textContent =
-            totalAtendimentos;
-
-    }
-
-
-    // ------------------------------------------
-    // MÉDIA
-    // ------------------------------------------
-
-    const mediaElemento =
-        document.getElementById(
-            "mediaDia"
-        );
-
-
-    if (mediaElemento) {
-
-        mediaElemento.textContent =
-            media.toFixed(1);
-
-    }
-
-
-    // ------------------------------------------
-    // MAIOR ATENDIMENTO
-    // ------------------------------------------
-
-    const maiorElemento =
-        document.getElementById(
-            "maiorAtendimento"
-        );
-
-
-    if (maiorElemento) {
-
-        maiorElemento.textContent =
-            maior;
-
-    }
+    definirTexto("clienteMenos", menos.cliente);
+    definirTexto(
+        "clienteMenosDetalhe",
+        descreverCliente(menos, clientes, "menos")
+    );
 
 }
 
 
-// ==========================================
-// RESUMO
-// ==========================================
+function descreverCliente(cliente, lista, tipo) {
+
+    const texto =
+        plural(cliente.atendimentos, "atendimento", "atendimentos") +
+        " · " +
+        formatarDuracao(cliente.conversa) +
+        " de conversa";
+
+    if (lista.length === 1) {
+        return texto + " · único cliente no período";
+    }
+
+    const empates = lista.filter(function (item) {
+        return item.atendimentos === cliente.atendimentos;
+    });
+
+    if (empates.length > 1 && tipo === "mais") {
+        return texto + " · maior conversa entre " + empates.length;
+    }
+
+    if (empates.length > 1 && tipo === "menos") {
+        return texto + " · menor conversa entre " + empates.length;
+    }
+
+    return texto;
+
+}
+
 
 function atualizarResumo() {
 
-    if (dadosFiltrados.length === 0) {
+    definirTexto("mediaEspera", mediaDuracao("espera", "temEspera"));
+    definirTexto("mediaConversa", mediaDuracao("conversa", "temConversa"));
+    definirTexto("resumoPeriodo", textoPeriodo());
 
-        return;
-
-    }
-
-
-    // Cria uma cópia para ordenar
-
-    const ordenados =
-        [...dadosFiltrados].sort(
-            function (a, b) {
-
-                return (
-                    converterData(a.data) -
-                    converterData(b.data)
-                );
-
-            }
-        );
-
-
-    const primeiro =
-        ordenados[0];
-
-
-    const ultimo =
-        ordenados[ordenados.length - 1];
-
-
-    // Procura o maior atendimento
-
-    const maior =
-        [...dadosFiltrados].sort(
-            function (a, b) {
-
-                return b.total - a.total;
-
-            }
-        )[0];
-
-
-    // ------------------------------------------
-    // PRIMEIRA DATA
-    // ------------------------------------------
-
-    const primeiraData =
-        document.getElementById(
-            "primeiraData"
-        );
-
-
-    if (primeiraData) {
-
-        primeiraData.textContent =
-            primeiro.data;
-
-    }
-
-
-    // ------------------------------------------
-    // ÚLTIMA DATA
-    // ------------------------------------------
-
-    const ultimaData =
-        document.getElementById(
-            "ultimaData"
-        );
-
-
-    if (ultimaData) {
-
-        ultimaData.textContent =
-            ultimo.data;
-
-    }
-
-
-    // ------------------------------------------
-    // DIA COM MAIS ATENDIMENTOS
-    // ------------------------------------------
-
-    const diaMaior =
-        document.getElementById(
-            "diaMaior"
-        );
-
-
-    if (diaMaior) {
-
-        diaMaior.textContent =
-            `${maior.data} — ${maior.total} atendimentos`;
-
-    }
-
-
-    // ------------------------------------------
-    // PERÍODO
-    // ------------------------------------------
-
-    const periodo =
-        document.getElementById(
-            "periodo"
-        );
-
+    const periodo = document.getElementById("periodo");
 
     if (periodo) {
-
-        periodo.textContent =
-            `${primeiro.data} até ${ultimo.data}`;
-
+        periodo.textContent = textoPeriodo();
     }
 
 }
 
 
-// ==========================================
-// TABELA
-// ==========================================
+function mediaDuracao(campo, flag) {
+
+    const comValor = registros.filter(function (item) {
+        return item[flag];
+    });
+
+    if (comValor.length === 0) {
+        return "-";
+    }
+
+    const soma = comValor.reduce(function (total, item) {
+        return total + item[campo];
+    }, 0);
+
+    return formatarDuracao(soma / comValor.length);
+
+}
+
+
+function textoPeriodo() {
+
+    const inicios = registros
+        .map(function (item) {
+            return item.inicio;
+        })
+        .filter(Boolean);
+
+    const fins = registros
+        .map(function (item) {
+            return item.fim;
+        })
+        .filter(Boolean);
+
+    if (inicios.length === 0) {
+        return plural(registros.length, "atendimento importado", "atendimentos importados");
+    }
+
+    inicios.sort(function (a, b) {
+        return converterData(a) - converterData(b);
+    });
+
+    fins.sort(function (a, b) {
+        return converterData(a) - converterData(b);
+    });
+
+    return inicios[0] + " até " + fins[fins.length - 1];
+
+}
+
 
 function atualizarTabela() {
 
-    const tabela =
-        document.getElementById(
-            "tabela"
-        );
-
+    const tabela = document.getElementById("tabela");
 
     if (!tabela) {
-
         return;
-
     }
-
 
     tabela.innerHTML = "";
 
-
-    if (dadosFiltrados.length === 0) {
+    if (clientes.length === 0) {
 
         tabela.innerHTML = `
             <tr>
-                <td colspan="3">
-                    Nenhum dado encontrado.
+                <td colspan="5" class="vazio">
+                    Nenhum cliente encontrado.
                 </td>
             </tr>
         `;
@@ -555,409 +422,371 @@ function atualizarTabela() {
 
     }
 
+    const maior = clientes[0].atendimentos;
 
-    // Maior valor para calcular a barra
+    clientes.forEach(function (item) {
 
-    const maior =
-        Math.max(
-            ...dadosFiltrados.map(
-                item => item.total
-            )
-        );
+        const tr = document.createElement("tr");
+        const porcentagem =
+            maior > 0
+                ? (item.atendimentos / maior) * 100
+                : 0;
 
+        tr.innerHTML = `
+            <td>
+                <div class="cliente">
+                    <span class="avatar">${iniciais(item.cliente)}</span>
+                    <strong>${escapar(item.cliente)}</strong>
+                </div>
+            </td>
+            <td class="num">${item.atendimentos}</td>
+            <td>${formatarDuracao(item.conversa)}</td>
+            <td>${formatarDuracao(item.espera)}</td>
+            <td>
+                <div class="trilho">
+                    <div class="barra" style="width: ${porcentagem}%"></div>
+                </div>
+            </td>
+        `;
 
-    dadosFiltrados.forEach(
-        function (item) {
+        tabela.appendChild(tr);
 
-            const tr =
-                document.createElement("tr");
-
-
-            const porcentagem =
-                maior > 0
-                    ? (item.total / maior) * 100
-                    : 0;
-
-
-            tr.innerHTML = `
-
-                <td>
-                    <strong>
-                        ${item.data}
-                    </strong>
-                </td>
-
-                <td>
-                    ${item.total}
-                </td>
-
-                <td>
-
-                    <div
-                        class="barra"
-                        style="width: ${porcentagem}%"
-                    ></div>
-
-                </td>
-
-            `;
-
-
-            tabela.appendChild(tr);
-
-        }
-    );
+    });
 
 }
 
-
-// ==========================================
-// GRÁFICO
-// ==========================================
 
 function atualizarGrafico() {
 
-    const canvas =
-        document.getElementById(
-            "grafico"
-        );
+    const canvas = document.getElementById("grafico");
 
-
-    if (!canvas) {
-
+    if (!canvas || typeof Chart === "undefined") {
         return;
-
     }
 
-
-    const labels =
-        dadosFiltrados.map(
-            item => item.data
-        );
-
-
-    const valores =
-        dadosFiltrados.map(
-            item => item.total
-        );
-
-
-    // Remove gráfico anterior
+    const topo = clientes.slice(0, 10);
 
     if (grafico) {
-
         grafico.destroy();
-
     }
 
-
-    // Cria gráfico novo
-
-    grafico =
-        new Chart(
-            canvas,
-            {
-
-                type: "bar",
-
-                data: {
-
-                    labels: labels,
-
-                    datasets: [
-
-                        {
-
-                            label:
-                                "Atendimentos",
-
-                            data: valores
-
-                        }
-
-                    ]
-
-                },
-
-                options: {
-
-                    responsive: true,
-
-                    maintainAspectRatio: false,
-
-                    scales: {
-
-                        y: {
-
-                            beginAtZero: true,
-
-                            ticks: {
-
-                                precision: 0
-
-                            }
-
-                        }
-
-                    }
-
+    grafico = new Chart(canvas, {
+        type: "bar",
+        data: {
+            labels: topo.map(function (item) {
+                return item.cliente;
+            }),
+            datasets: [
+                {
+                    label: "Atendimentos",
+                    data: topo.map(function (item) {
+                        return item.atendimentos;
+                    }),
+                    backgroundColor: "#7817ff",
+                    borderRadius: 8,
+                    borderSkipped: false,
+                    maxBarThickness: 18
                 }
-
+            ]
+        },
+        options: {
+            indexAxis: "y",
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    backgroundColor: "#202936",
+                    borderColor: "#3b4c68",
+                    borderWidth: 1,
+                    titleColor: "#ffffff",
+                    bodyColor: "#dce2eb",
+                    padding: 12,
+                    cornerRadius: 10,
+                    displayColors: false
+                }
+            },
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    ticks: {
+                        color: "#9ba8bc",
+                        precision: 0,
+                        font: {
+                            family: "Inter, Arial, sans-serif",
+                            size: 11
+                        }
+                    },
+                    grid: {
+                        color: "#303b4d"
+                    },
+                    border: {
+                        display: false
+                    }
+                },
+                y: {
+                    ticks: {
+                        color: "#dce2eb",
+                        font: {
+                            family: "Inter, Arial, sans-serif",
+                            size: 12
+                        }
+                    },
+                    grid: {
+                        display: false
+                    },
+                    border: {
+                        display: false
+                    }
+                }
             }
-        );
+        }
+    });
 
 }
 
 
-// ==========================================
-// CONVERTER DATA
-// ==========================================
+function compararMais(a, b) {
+
+    if (b.atendimentos !== a.atendimentos) {
+        return b.atendimentos - a.atendimentos;
+    }
+
+    return b.conversa - a.conversa;
+
+}
+
+
+function compararMenos(a, b) {
+
+    if (a.atendimentos !== b.atendimentos) {
+        return a.atendimentos - b.atendimentos;
+    }
+
+    return a.conversa - b.conversa;
+
+}
+
+
+function extrairPeriodo(linhas) {
+
+    const texto = linhas
+        .flat()
+        .map(function (celula) {
+            return String(celula);
+        })
+        .join(" ");
+
+    const encontrado = texto.match(
+        /Per[ií]odo:\s*(\d{2}\/\d{2}\/\d{4})\s*-\s*(\d{2}\/\d{2}\/\d{4})/i
+    );
+
+    if (!encontrado) {
+        return null;
+    }
+
+    return {
+        inicio: encontrado[1],
+        fim: encontrado[2]
+    };
+
+}
+
+
+function periodoDoNome(nome) {
+
+    const encontrado = String(nome).match(
+        /(\d{2})-(\d{2})-(\d{4})-(\d{2})-(\d{2})-(\d{4})/
+    );
+
+    if (!encontrado) {
+        return null;
+    }
+
+    return {
+        inicio: encontrado[1] + "/" + encontrado[2] + "/" + encontrado[3],
+        fim: encontrado[4] + "/" + encontrado[5] + "/" + encontrado[6]
+    };
+
+}
+
+
+function tempoParaSegundos(valor) {
+
+    if (!celulaPreenchida(valor)) {
+        return 0;
+    }
+
+    if (typeof valor === "number") {
+        return valor * 86400;
+    }
+
+    const texto = String(valor).trim();
+    const partes = texto.split(":");
+
+    if (partes.length >= 2) {
+
+        const horas = Number(partes[0]) || 0;
+        const minutos = Number(partes[1]) || 0;
+        const segundos = Number(partes[2]) || 0;
+
+        return (horas * 3600) + (minutos * 60) + segundos;
+
+    }
+
+    const numero = Number(texto.replace(",", "."));
+
+    if (Number.isNaN(numero)) {
+        return 0;
+    }
+
+    return numero * 86400;
+
+}
+
+
+function formatarDuracao(segundos) {
+
+    const total = Math.max(0, Math.round(segundos));
+    const dias = Math.floor(total / 86400);
+    const horas = Math.floor((total % 86400) / 3600);
+    const minutos = Math.floor((total % 3600) / 60);
+    const resto = total % 60;
+
+    if (dias > 0) {
+        return dias + "d " + horas + "h " + minutos + "min";
+    }
+
+    if (horas > 0) {
+        return horas + "h " + minutos + "min";
+    }
+
+    if (minutos > 0) {
+        return minutos + "min " + resto + "s";
+    }
+
+    return resto + "s";
+
+}
+
+
+function celulaPreenchida(valor) {
+
+    return valor !== "" && valor !== null && valor !== undefined;
+
+}
+
+
+function textoCelula(valor) {
+
+    if (!celulaPreenchida(valor)) {
+        return "";
+    }
+
+    return String(valor).trim();
+
+}
+
+
+function normalizar(valor) {
+
+    return String(valor)
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "");
+
+}
+
 
 function converterData(data) {
 
-    if (!data) {
+    const partes = String(data).split("/");
 
-        return new Date(NaN);
-
+    if (partes.length !== 3) {
+        return new Date(data);
     }
 
+    return new Date(
+        Number(partes[2]),
+        Number(partes[1]) - 1,
+        Number(partes[0])
+    );
 
-    const texto =
-        String(data).trim();
-
-
-    // ------------------------------------------
-    // FORMATO DA PLANILHA:
-    // DD/MM/YYYY
-    // ------------------------------------------
-
-    const partes =
-        texto.split("/");
+}
 
 
-    if (partes.length === 3) {
+function plural(quantidade, singular, pluralTexto) {
 
-        return new Date(
-
-            Number(partes[2]),
-
-            Number(partes[1]) - 1,
-
-            Number(partes[0])
-
-        );
-
+    if (quantidade === 1) {
+        return "1 " + singular;
     }
 
+    return quantidade + " " + pluralTexto;
 
-    // ------------------------------------------
-    // FORMATO YYYY-MM-DD
-    // ------------------------------------------
-
-    if (
-        /^\d{4}-\d{2}-\d{2}$/.test(texto)
-    ) {
-
-        const partesISO =
-            texto.split("-");
+}
 
 
-        return new Date(
+function iniciais(nome) {
 
-            Number(partesISO[0]),
+    const partes = String(nome)
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
 
-            Number(partesISO[1]) - 1,
-
-            Number(partesISO[2])
-
-        );
-
+    if (partes.length === 0) {
+        return "?";
     }
 
+    if (partes.length === 1) {
+        return partes[0].slice(0, 2).toUpperCase();
+    }
 
-    return new Date(texto);
-
-}
-
-
-// ==========================================
-// FILTRO POR DATA
-// ==========================================
-
-const btnFiltrar =
-    document.getElementById(
-        "btnFiltrar"
-    );
-
-
-if (btnFiltrar) {
-
-    btnFiltrar.addEventListener(
-        "click",
-        aplicarFiltro
-    );
+    return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
 
 }
 
 
-function aplicarFiltro() {
+function escapar(texto) {
 
-    const campoInicial =
-        document.getElementById("dataInicial");
-
-    const campoFinal =
-        document.getElementById("dataFinal");
-
-    const inicial =
-        campoInicial
-            ? campoInicial.value
-            : "";
-
-    const final =
-        campoFinal
-            ? campoFinal.value
-            : "";
-
-
-    dadosFiltrados =
-        atendimentos.filter(function (item) {
-
-            // Data do XML: DD/MM/YYYY
-            const partes = item.data.split("/");
-
-            if (partes.length !== 3) {
-                return false;
-            }
-
-            // Transforma:
-            // 28/09/2026
-            // em:
-            // 2026-09-28
-            const dataItem =
-                partes[2] + "-" +
-                partes[1].padStart(2, "0") + "-" +
-                partes[0].padStart(2, "0");
-
-
-            // Verifica data inicial
-            if (inicial && dataItem < inicial) {
-                return false;
-            }
-
-
-            // Verifica data final
-            if (final && dataItem > final) {
-                return false;
-            }
-
-
-            return true;
-        });
-
-
-    atualizarDashboard();
-}
-
-
-// ==========================================
-// LIMPAR FILTRO
-// ==========================================
-
-const btnLimpar =
-    document.getElementById(
-        "btnLimpar"
-    );
-
-
-if (btnLimpar) {
-
-    btnLimpar.addEventListener(
-        "click",
-        function () {
-
-            const campoInicial =
-                document.getElementById(
-                    "dataInicial"
-                );
-
-
-            const campoFinal =
-                document.getElementById(
-                    "dataFinal"
-                );
-
-
-            if (campoInicial) {
-
-                campoInicial.value = "";
-
-            }
-
-
-            if (campoFinal) {
-
-                campoFinal.value = "";
-
-            }
-
-
-            dadosFiltrados =
-                [...atendimentos];
-
-
-            atualizarDashboard();
-
-        }
-    );
+    return String(texto)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
 
 }
 
 
-// ==========================================
-// PESQUISA
-// ==========================================
+function definirTexto(id, valor) {
 
-const pesquisa =
-    document.getElementById(
-        "pesquisa"
-    );
+    const elemento = document.getElementById(id);
 
+    if (elemento) {
+        elemento.textContent = valor;
+    }
+
+}
+
+
+const pesquisa = document.getElementById("pesquisa");
 
 if (pesquisa) {
 
-    pesquisa.addEventListener(
-        "input",
-        function () {
+    pesquisa.addEventListener("input", function () {
 
-            const termo =
-                this.value
-                    .toLowerCase()
-                    .trim();
+        const termo = this.value.toLowerCase().trim();
 
+        document.querySelectorAll("#tabela tr").forEach(function (linha) {
 
-            const linhas =
-                document.querySelectorAll(
-                    "#tabela tr"
-                );
+            linha.style.display =
+                linha.textContent.toLowerCase().includes(termo)
+                    ? ""
+                    : "none";
 
+        });
 
-            linhas.forEach(
-                function (linha) {
-
-                    const texto =
-                        linha.textContent
-                            .toLowerCase();
-
-
-                    linha.style.display =
-                        texto.includes(termo)
-                            ? ""
-                            : "none";
-
-                }
-            );
-
-        }
-    );
+    });
 
 }
