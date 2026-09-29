@@ -1,6 +1,8 @@
 let registros = [];
 let clientes = [];
 let grafico = null;
+let paginaAtual = 1;
+const ITENS_POR_PAGINA = 10;
 
 
 const arquivoPlanilha = document.getElementById("arquivoPlanilha");
@@ -71,6 +73,7 @@ if (arquivoPlanilha) {
 
         }
 
+        paginaAtual = 1;
         atualizarDashboard();
 
         if (falhas.length > 0) {
@@ -431,6 +434,22 @@ function textoPeriodo() {
 }
 
 
+function clientesFiltrados() {
+
+    const campo = document.getElementById("pesquisa");
+    const termo = campo ? campo.value.toLowerCase().trim() : "";
+
+    if (termo === "") {
+        return clientes;
+    }
+
+    return clientes.filter(function (item) {
+        return item.cliente.toLowerCase().includes(termo);
+    });
+
+}
+
+
 function atualizarTabela() {
 
     const tabela = document.getElementById("tabela");
@@ -451,13 +470,43 @@ function atualizarTabela() {
             </tr>
         `;
 
+        atualizarPaginacao([]);
         return;
 
     }
 
+    const filtrados = clientesFiltrados();
+
+    if (filtrados.length === 0) {
+
+        tabela.innerHTML = `
+            <tr>
+                <td colspan="5" class="vazio">
+                    Nenhum cliente corresponde à pesquisa.
+                </td>
+            </tr>
+        `;
+
+        atualizarPaginacao([]);
+        return;
+
+    }
+
+    const totalPaginas = Math.max(1, Math.ceil(filtrados.length / ITENS_POR_PAGINA));
+
+    if (paginaAtual > totalPaginas) {
+        paginaAtual = totalPaginas;
+    }
+
+    if (paginaAtual < 1) {
+        paginaAtual = 1;
+    }
+
+    const inicio = (paginaAtual - 1) * ITENS_POR_PAGINA;
+    const pagina = filtrados.slice(inicio, inicio + ITENS_POR_PAGINA);
     const maior = clientes[0].atendimentos;
 
-    clientes.forEach(function (item) {
+    pagina.forEach(function (item) {
 
         const tr = document.createElement("tr");
         const porcentagem =
@@ -485,6 +534,105 @@ function atualizarTabela() {
         tabela.appendChild(tr);
 
     });
+
+    atualizarPaginacao(filtrados);
+
+}
+
+
+function atualizarPaginacao(filtrados) {
+
+    const barra = document.getElementById("paginacao");
+    const info = document.getElementById("paginacaoInfo");
+    const paginas = document.getElementById("paginacaoPaginas");
+    const anterior = document.getElementById("paginaAnterior");
+    const proxima = document.getElementById("paginaProxima");
+
+    if (!barra || !info || !paginas || !anterior || !proxima) {
+        return;
+    }
+
+    if (filtrados.length === 0) {
+        barra.hidden = true;
+        paginas.innerHTML = "";
+        return;
+    }
+
+    const totalPaginas = Math.ceil(filtrados.length / ITENS_POR_PAGINA);
+    const inicio = (paginaAtual - 1) * ITENS_POR_PAGINA + 1;
+    const fim = Math.min(paginaAtual * ITENS_POR_PAGINA, filtrados.length);
+
+    barra.hidden = false;
+    info.textContent =
+        "Mostrando " + inicio + "–" + fim + " de " + filtrados.length;
+
+    anterior.disabled = paginaAtual <= 1;
+    proxima.disabled = paginaAtual >= totalPaginas;
+
+    paginas.innerHTML = "";
+
+    numerosPagina(paginaAtual, totalPaginas).forEach(function (numero) {
+
+        if (numero === "…") {
+
+            const reticencias = document.createElement("span");
+            reticencias.className = "paginacao-reticencias";
+            reticencias.textContent = "…";
+            paginas.appendChild(reticencias);
+            return;
+
+        }
+
+        const botao = document.createElement("button");
+        botao.type = "button";
+        botao.textContent = String(numero);
+
+        if (numero === paginaAtual) {
+            botao.setAttribute("aria-current", "page");
+        }
+
+        botao.addEventListener("click", function () {
+            paginaAtual = numero;
+            atualizarTabela();
+        });
+
+        paginas.appendChild(botao);
+
+    });
+
+}
+
+
+function numerosPagina(atual, total) {
+
+    if (total <= 7) {
+
+        return Array.from({ length: total }, function (_, i) {
+            return i + 1;
+        });
+
+    }
+
+    const itens = [1];
+
+    if (atual > 3) {
+        itens.push("…");
+    }
+
+    const inicio = Math.max(2, atual - 1);
+    const fim = Math.min(total - 1, atual + 1);
+
+    for (let i = inicio; i <= fim; i++) {
+        itens.push(i);
+    }
+
+    if (atual < total - 2) {
+        itens.push("…");
+    }
+
+    itens.push(total);
+
+    return itens;
 
 }
 
@@ -840,18 +988,29 @@ const pesquisa = document.getElementById("pesquisa");
 if (pesquisa) {
 
     pesquisa.addEventListener("input", function () {
+        paginaAtual = 1;
+        atualizarTabela();
+    });
 
-        const termo = this.value.toLowerCase().trim();
+}
 
-        document.querySelectorAll("#tabela tr").forEach(function (linha) {
+const paginaAnterior = document.getElementById("paginaAnterior");
+const paginaProxima = document.getElementById("paginaProxima");
 
-            linha.style.display =
-                linha.textContent.toLowerCase().includes(termo)
-                    ? ""
-                    : "none";
+if (paginaAnterior) {
 
-        });
+    paginaAnterior.addEventListener("click", function () {
+        paginaAtual -= 1;
+        atualizarTabela();
+    });
 
+}
+
+if (paginaProxima) {
+
+    paginaProxima.addEventListener("click", function () {
+        paginaAtual += 1;
+        atualizarTabela();
     });
 
 }

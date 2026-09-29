@@ -472,6 +472,78 @@ td.vazio {
 }
 
 /* =========================
+   PAGINAÇÃO
+========================= */
+
+.paginacao {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+}
+
+.paginacao[hidden] {
+    display: none;
+}
+
+.paginacao-info {
+    color: #8e9aae;
+    font-size: 13px;
+}
+
+.paginacao-controles {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.paginacao-paginas {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.paginacao button {
+    min-width: 36px;
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid #3b4c68;
+    border-radius: 8px;
+    background: #171e29;
+    color: #dce2eb;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.paginacao button:hover:not(:disabled) {
+    border-color: #7817ff;
+    background: #252f3e;
+}
+
+.paginacao button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.paginacao button[aria-current="page"] {
+    background: #7817ff;
+    border-color: #7817ff;
+    color: #ffffff;
+}
+
+.paginacao-reticencias {
+    color: #8e9aae;
+    padding: 0 4px;
+    font-size: 13px;
+}
+
+/* =========================
    BARRA DA TABELA
 ========================= */
 
@@ -545,6 +617,11 @@ td.vazio {
     .busca {
         width: 100%;
         min-width: 0;
+    }
+
+    .paginacao {
+        flex-direction: column;
+        align-items: flex-start;
     }
 
     .botao-upload {
