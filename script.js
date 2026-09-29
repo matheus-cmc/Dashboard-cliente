@@ -22,6 +22,10 @@ if (arquivoPlanilha) {
 
         for (const arquivo of arquivos) {
 
+            if (ehAtendimentoTelWhats(arquivo.name)) {
+                continue;
+            }
+
             try {
 
                 const buffer = await lerArquivo(arquivo);
@@ -53,7 +57,20 @@ if (arquivoPlanilha) {
 
         }
 
-        registros = deduplicar(todos);
+        registros = deduplicar(todos).filter(function (item) {
+            return !ehAtendimentoTelWhats(item.cliente);
+        });
+
+        if (registros.length === 0) {
+
+            alert(
+                "Não encontrei atendimentos nessa planilha. Use o Excel de Tempos de Atendimento exportado pelo TomTicket."
+            );
+
+            return;
+
+        }
+
         atualizarDashboard();
 
         if (falhas.length > 0) {
@@ -98,7 +115,15 @@ function lerPlanilha(buffer, nomeArquivo) {
     }
 
     const livro = XLSX.read(buffer, { type: "array" });
-    const aba = livro.Sheets[livro.SheetNames[0]];
+    const nomeAba = livro.SheetNames.find(function (nome) {
+        return !ehAtendimentoTelWhats(nome);
+    });
+
+    if (!nomeAba) {
+        return [];
+    }
+
+    const aba = livro.Sheets[nomeAba];
 
     const linhas = XLSX.utils.sheet_to_json(aba, {
         header: 1,
@@ -168,6 +193,10 @@ function lerPlanilha(buffer, nomeArquivo) {
             continue;
         }
 
+        if (ehAtendimentoTelWhats(cliente)) {
+            continue;
+        }
+
         const espera = linha[colunas.espera];
         const conversa = linha[colunas.conversa];
 
@@ -215,6 +244,10 @@ function agruparClientes(itens) {
     const mapa = new Map();
 
     itens.forEach(function (item) {
+
+        if (ehAtendimentoTelWhats(item.cliente)) {
+            return;
+        }
 
         const nome =
             item.cliente !== ""
@@ -697,6 +730,38 @@ function normalizar(valor) {
         .replace(/[\u0300-\u036f]/g, "")
         .toLowerCase()
         .replace(/[^a-z0-9]/g, "");
+
+}
+
+
+function ehAtendimentoTelWhats(valor) {
+
+    const n = normalizar(valor);
+
+    if (n.includes("atendimentotelwhats")) {
+        return true;
+    }
+
+    const tokens = String(valor)
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter(Boolean);
+
+    const temAtendimento = tokens.some(function (token) {
+        return token === "atendimento" || token.indexOf("atendimento") === 0;
+    });
+
+    const temTel = tokens.some(function (token) {
+        return token === "tel" || token === "telefone";
+    });
+
+    const temWhats = tokens.some(function (token) {
+        return token.indexOf("whats") === 0;
+    });
+
+    return temAtendimento && temTel && temWhats;
 
 }
 
