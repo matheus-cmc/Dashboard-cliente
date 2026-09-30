@@ -674,6 +674,11 @@ function atualizarGrafico() {
             indexAxis: "y",
             responsive: true,
             maintainAspectRatio: false,
+            onHover: function (evento) {
+                if (evento && evento.native && evento.native.target) {
+                    evento.native.target.style.cursor = "default";
+                }
+            },
             plugins: {
                 legend: {
                     display: false

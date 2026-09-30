@@ -7,11 +7,27 @@
 body {
     font-family: Inter, Arial, Helvetica, sans-serif;
     background:
-        radial-gradient(900px 420px at 0% -8%, rgba(120, 23, 255, 0.16), transparent 60%),
-        #151922;
+        radial-gradient(980px 460px at -6% -12%, rgba(120, 23, 255, 0.2), transparent 58%),
+        radial-gradient(760px 420px at 108% 0%, rgba(255, 92, 124, 0.08), transparent 50%),
+        #12161e;
     color: #ffffff;
     min-height: 100vh;
+    cursor: default;
+    user-select: none;
+    -webkit-user-select: none;
     -webkit-font-smoothing: antialiased;
+}
+
+input,
+textarea {
+    cursor: text;
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+::selection {
+    background: rgba(120, 23, 255, 0.35);
+    color: #ffffff;
 }
 
 /* =========================
@@ -23,15 +39,15 @@ body {
     top: 0;
     z-index: 20;
     min-height: 76px;
-    background: rgba(32, 39, 53, 0.92);
-    backdrop-filter: blur(14px);
+    background: rgba(24, 30, 41, 0.88);
+    backdrop-filter: blur(18px);
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 16px;
     padding: 14px 32px;
-    border-bottom: 1px solid #303c50;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22);
 }
 
 .marca {
@@ -49,8 +65,8 @@ body {
     place-items: center;
     border-radius: 12px;
     color: #ffffff;
-    background: #7817ff;
-    box-shadow: 0 8px 18px rgba(120, 23, 255, 0.28);
+    background: linear-gradient(180deg, #8c3aff, #6a0dff);
+    box-shadow: 0 10px 22px rgba(120, 23, 255, 0.32);
 }
 
 .marca-icone svg,
@@ -82,7 +98,7 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    background: #7817ff;
+    background: linear-gradient(180deg, #8c3aff, #7817ff);
     color: white;
     padding: 11px 16px;
     border-radius: 10px;
@@ -90,13 +106,19 @@ body {
     font-size: 14px;
     font-weight: 600;
     white-space: nowrap;
-    box-shadow: 0 8px 18px rgba(120, 23, 255, 0.24);
-    transition: background 0.2s ease, transform 0.2s ease;
+    box-shadow: 0 8px 20px rgba(120, 23, 255, 0.28);
+    transition: filter 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .botao-upload:hover {
-    background: #8c3aff;
+    filter: brightness(1.08);
     transform: translateY(-1px);
+    box-shadow: 0 12px 24px rgba(120, 23, 255, 0.34);
+}
+
+.botao-upload:focus-visible {
+    outline: 2px solid #c9a8ff;
+    outline-offset: 3px;
 }
 
 /* =========================
@@ -121,18 +143,34 @@ body {
 }
 
 .card {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 42%), #202936;
-    border: 1px solid #3b4c68;
+    position: relative;
+    overflow: hidden;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 46%),
+        #1c2433;
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 16px;
-    padding: 18px 18px 20px;
+    padding: 18px 18px 20px 22px;
     min-height: 132px;
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
-    transition: border-color 0.2s ease, transform 0.2s ease;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+    transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 16px;
+    bottom: 16px;
+    width: 3px;
+    border-radius: 0 4px 4px 0;
+    background: linear-gradient(180deg, #b58cff, #7817ff);
 }
 
 .card:hover {
-    border-color: #536686;
+    border-color: rgba(120, 23, 255, 0.45);
     transform: translateY(-2px);
+    box-shadow: 0 16px 34px rgba(0, 0, 0, 0.24);
 }
 
 .card-topo {
@@ -199,12 +237,14 @@ body {
 ========================= */
 
 .painel {
-    background: #202936;
-    border: 1px solid #3b4c68;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 28%),
+        #1c2433;
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 16px;
     padding: 22px;
     margin-bottom: 16px;
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
 }
 
 /* =========================
@@ -307,8 +347,12 @@ body {
     height: 380px;
     padding: 8px 4px 0;
     border-radius: 12px;
-    background: #171e29;
-    border: 1px solid #303d53;
+    background: #141b26;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.grafico-container canvas {
+    cursor: default;
 }
 
 /* =========================
@@ -322,10 +366,15 @@ body {
 }
 
 .resumo div {
-    background: #171e29;
-    border: 1px solid #303d53;
+    background: #141b26;
+    border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 12px;
     padding: 16px 18px;
+    transition: border-color 0.2s ease;
+}
+
+.resumo div:hover {
+    border-color: rgba(120, 23, 255, 0.4);
 }
 
 .resumo span {
@@ -392,9 +441,9 @@ body {
 
 .tabela-container {
     overflow: auto;
-    border: 1px solid #303d53;
+    border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 12px;
-    background: #171e29;
+    background: #141b26;
 }
 
 table {
@@ -403,10 +452,13 @@ table {
 }
 
 thead {
-    background: #35445d;
+    background: #2b384d;
 }
 
 th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
     padding: 13px 16px;
     text-align: left;
     color: #aab6c9;
@@ -414,14 +466,19 @@ th {
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
+    background: #2b384d;
 }
 
 td {
     padding: 14px 16px;
-    border-bottom: 1px solid #303b4d;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     color: #dce2eb;
     font-size: 13.5px;
     vertical-align: middle;
+}
+
+tbody tr:nth-child(even) {
+    background: rgba(255, 255, 255, 0.018);
 }
 
 tbody tr:last-child td {
@@ -429,7 +486,7 @@ tbody tr:last-child td {
 }
 
 tbody tr:hover {
-    background: #252f3e;
+    background: rgba(120, 23, 255, 0.1);
 }
 
 td.num {
@@ -526,6 +583,11 @@ td.vazio {
     background: #252f3e;
 }
 
+.paginacao button:focus-visible {
+    outline: 2px solid #c9a8ff;
+    outline-offset: 2px;
+}
+
 .paginacao button:disabled {
     opacity: 0.4;
     cursor: not-allowed;
@@ -557,7 +619,7 @@ td.vazio {
 
 .barra {
     height: 100%;
-    background: #ff5c7c;
+    background: linear-gradient(90deg, #7817ff, #ff5c7c);
     border-radius: 20px;
     min-width: 4px;
 }
