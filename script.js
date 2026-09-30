@@ -2,6 +2,7 @@ let registros = [];
 let clientes = [];
 let grafico = null;
 let paginaAtual = 1;
+let registrosExcluidos = 0;
 const ITENS_POR_PAGINA = 10;
 
 
@@ -20,6 +21,7 @@ if (arquivoPlanilha) {
         }
 
         const todos = [];
+        const excluidos = [];
         const falhas = [];
 
         for (const arquivo of arquivos) {
@@ -31,14 +33,15 @@ if (arquivoPlanilha) {
             try {
 
                 const buffer = await lerArquivo(arquivo);
-                const itens = lerPlanilha(buffer, arquivo.name);
+                const resultado = lerPlanilha(buffer, arquivo.name);
 
-                if (itens.length === 0) {
+                if (resultado.itens.length === 0 && resultado.excluidos.length === 0) {
                     falhas.push(arquivo.name);
                     continue;
                 }
 
-                todos.push(...itens);
+                todos.push(...resultado.itens);
+                excluidos.push(...resultado.excluidos);
 
             } catch (erro) {
 
@@ -49,7 +52,7 @@ if (arquivoPlanilha) {
 
         }
 
-        if (todos.length === 0) {
+        if (todos.length === 0 && excluidos.length === 0) {
 
             alert(
                 "Não encontrei atendimentos nessa planilha. Use o Excel de Tempos de Atendimento exportado pelo TomTicket."
@@ -63,15 +66,13 @@ if (arquivoPlanilha) {
             return !ehAtendimentoTelWhats(item.cliente);
         });
 
-        if (registros.length === 0) {
+        const protocolosIncluidos = new Set(registros.map(function (item) {
+            return item.protocolo;
+        }));
 
-            alert(
-                "Não encontrei atendimentos nessa planilha. Use o Excel de Tempos de Atendimento exportado pelo TomTicket."
-            );
-
-            return;
-
-        }
+        registrosExcluidos = deduplicar(excluidos).filter(function (item) {
+            return !protocolosIncluidos.has(item.protocolo);
+        }).length;
 
         paginaAtual = 1;
         atualizarDashboard();
@@ -123,7 +124,7 @@ function lerPlanilha(buffer, nomeArquivo) {
     });
 
     if (!nomeAba) {
-        return [];
+        return { itens: [], excluidos: [] };
     }
 
     const aba = livro.Sheets[nomeAba];
@@ -157,7 +158,7 @@ function lerPlanilha(buffer, nomeArquivo) {
     }
 
     if (indiceCabecalho === -1) {
-        return [];
+        return { itens: [], excluidos: [] };
     }
 
     const cabecalho = linhas[indiceCabecalho].map(function (celula) {
@@ -176,6 +177,7 @@ function lerPlanilha(buffer, nomeArquivo) {
     };
 
     const itens = [];
+    const excluidos = [];
 
     for (let i = indiceCabecalho + 1; i < linhas.length; i++) {
 
@@ -197,6 +199,10 @@ function lerPlanilha(buffer, nomeArquivo) {
         }
 
         if (ehAtendimentoTelWhats(cliente)) {
+            excluidos.push({
+                protocolo: protocolo,
+                cliente: cliente
+            });
             continue;
         }
 
@@ -216,7 +222,10 @@ function lerPlanilha(buffer, nomeArquivo) {
 
     }
 
-    return itens;
+    return {
+        itens: itens,
+        excluidos: excluidos
+    };
 
 }
 
@@ -372,13 +381,27 @@ function descreverCliente(cliente, lista, tipo) {
 function atualizarResumo() {
 
     definirTexto("mediaEspera", mediaDuracao("espera", "temEspera"));
+    definirTexto("medianaEspera", medianaDuracao("espera", "temEspera"));
+    definirTexto("p90Espera", percentil90Duracao("espera", "temEspera"));
     definirTexto("mediaConversa", mediaDuracao("conversa", "temConversa"));
-    definirTexto("resumoPeriodo", textoPeriodo());
+    definirTexto("medianaConversa", medianaDuracao("conversa", "temConversa"));
+    definirTexto("p90Conversa", percentil90Duracao("conversa", "temConversa"));
 
     const periodo = document.getElementById("periodo");
 
     if (periodo) {
         periodo.textContent = textoPeriodo();
+    }
+
+    const notaExclusoes = document.getElementById("notaExclusoes");
+
+    if (notaExclusoes) {
+        const total = registros.length + registrosExcluidos;
+        notaExclusoes.hidden = registrosExcluidos === 0;
+        notaExclusoes.textContent =
+            plural(registrosExcluidos, "registro", "registros") +
+            " de ATENDIMENTO - TEL - WHATS excluídos · " +
+            registros.length + " de " + total + " analisados";
     }
 
 }
@@ -399,6 +422,55 @@ function mediaDuracao(campo, flag) {
     }, 0);
 
     return formatarDuracao(soma / comValor.length);
+
+}
+
+
+function duracoesOrdenadas(campo, flag) {
+
+    return registros
+        .filter(function (item) {
+            return item[flag];
+        })
+        .map(function (item) {
+            return item[campo];
+        })
+        .sort(function (a, b) {
+            return a - b;
+        });
+
+}
+
+
+function medianaDuracao(campo, flag) {
+
+    const valores = duracoesOrdenadas(campo, flag);
+
+    if (valores.length === 0) {
+        return "-";
+    }
+
+    const meio = Math.floor(valores.length / 2);
+    const mediana = valores.length % 2 === 0
+        ? (valores[meio - 1] + valores[meio]) / 2
+        : valores[meio];
+
+    return formatarDuracao(mediana);
+
+}
+
+
+function percentil90Duracao(campo, flag) {
+
+    const valores = duracoesOrdenadas(campo, flag);
+
+    if (valores.length === 0) {
+        return "-";
+    }
+
+    const indice = Math.ceil(valores.length * 0.9) - 1;
+
+    return formatarDuracao(valores[indice]);
 
 }
 

@@ -122,6 +122,7 @@
                     <h2>Atendimentos por cliente</h2>
                     <p>Quem mais solicitou tem mais atendimentos. O tempo de conversa desempata quem interagiu mais ou menos.</p>
                     <p id="periodo">Nenhuma planilha carregada</p>
+                    <p id="notaExclusoes" class="nota-exclusoes" hidden></p>
                 </div>
 
             </div>
@@ -137,25 +138,43 @@
 
             <div class="titulo">
 
-                <h2>Tempos do período</h2>
+                <div>
+                    <h2>Tempos do período</h2>
+                    <p class="explicacao-metricas">Poucos atendimentos com tempos muito longos podem aumentar as médias. Por isso, mostramos também o tempo que metade dos atendimentos não ultrapassou e o tempo que 9 em cada 10 não ultrapassaram.</p>
+                </div>
 
             </div>
 
             <div class="resumo">
 
                 <div>
-                    <span>Tempo médio de espera</span>
+                    <span>Espera média</span>
                     <strong id="mediaEspera">-</strong>
                 </div>
 
                 <div>
-                    <span>Tempo médio de conversa</span>
+                    <span>Espera · metade dos atendimentos</span>
+                    <strong id="medianaEspera">-</strong>
+                </div>
+
+                <div>
+                    <span>Espera · 9 em cada 10 atendimentos</span>
+                    <strong id="p90Espera">-</strong>
+                </div>
+
+                <div>
+                    <span>Conversa média</span>
                     <strong id="mediaConversa">-</strong>
                 </div>
 
                 <div>
-                    <span>Período</span>
-                    <strong id="resumoPeriodo">-</strong>
+                    <span>Conversa · metade dos atendimentos</span>
+                    <strong id="medianaConversa">-</strong>
+                </div>
+
+                <div>
+                    <span>Conversa · 9 em cada 10 atendimentos</span>
+                    <strong id="p90Conversa">-</strong>
                 </div>
 
             </div>
